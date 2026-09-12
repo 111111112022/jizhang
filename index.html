@@ -1,4 +1,3 @@
-
 <!DOCTYPE html>
 <html lang="zh-CN">
 <head>
@@ -177,9 +176,8 @@
 <body>
 
   <h1>纯支出记账</h1>
-  <div class="sub">欢迎宥宥记账</div>
+  <div class="sub">只记花了多少，不记收入</div>
 
-  <!-- 记一笔 -->
   <div class="card">
     <div class="field">
       <label>分类</label>
@@ -205,7 +203,6 @@
     <button class="btn-main" id="addBtn">记一笔</button>
   </div>
 
-  <!-- 本月统计 -->
   <div class="stats" style="margin-bottom:14px;">
     <div class="stat">
       <div class="num" id="statTotal">¥0</div>
@@ -221,7 +218,6 @@
     </div>
   </div>
 
-  <!-- 分类统计 -->
   <div class="card">
     <div class="month-bar">
       <div class="title">本月分类</div>
@@ -229,7 +225,6 @@
     <div id="catStats"></div>
   </div>
 
-  <!-- 账单列表 -->
   <div class="card">
     <div class="month-bar">
       <div class="title" id="listTitle">本月账单</div>
@@ -238,7 +233,6 @@
     <div id="list"></div>
   </div>
 
-  <!-- 底部操作 -->
   <div class="footer-btns">
     <button class="btn-sec" id="exportBtn">导出 CSV</button>
     <button class="btn-sec" id="clearBtn">清空数据</button>
@@ -283,7 +277,6 @@
     return parseInt(m) + '月' + parseInt(d) + '日';
   }
 
-  // 渲染分类按钮
   function renderCats(){
     const grid = $('catGrid');
     grid.innerHTML = '';
@@ -296,7 +289,6 @@
     });
   }
 
-  // 添加
   function addRecord(){
     const amount = parseFloat($('amount').value);
     const note = $('note').value.trim();
@@ -323,7 +315,6 @@
     renderAll();
   }
 
-  // 删除
   function delRecord(id){
     if (!confirm('删除这条记录？')) return;
     const data = load().filter(r => r.id !== id);
@@ -331,7 +322,6 @@
     renderAll();
   }
 
-  // 当前月份
   function currentMonth(){
     const d = new Date();
     return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0');
@@ -342,14 +332,12 @@
     const month = currentMonth();
     const monthData = all.filter(r => r.date.startsWith(month));
 
-    // 统计
     const total = monthData.reduce((s,r) => s + r.amount, 0);
     $('statTotal').textContent = fmtMoney(total);
     $('statCount').textContent = monthData.length;
     const dayOfMonth = new Date().getDate();
     $('statAvg').textContent = fmtMoney(monthData.length ? total / dayOfMonth : 0);
 
-    // 分类统计
     const catMap = {};
     monthData.forEach(r => {
       catMap[r.cat] = (catMap[r.cat] || 0) + r.amount;
@@ -363,4 +351,86 @@
       catBox.innerHTML = catArr.map(([name, val]) => {
         const icon = (CATS.find(c => c.key === name) || {}).icon || '📦';
         return `<div style="padding:8px 0;">
-          <div class="cat-st
+          <div class="cat-stat-item">
+            <span class="name">${icon} ${name}</span>
+            <span class="val">${fmtMoney(val)}</span>
+          </div>
+          <div class="bar-wrap"><div class="bar" style="width:${Math.max(4, val/max*100)}%"></div></div>
+        </div>`;
+      }).join('');
+    }
+
+    let listData = showAll ? all : monthData;
+    listData = listData.slice().sort((a,b) => b.date.localeCompare(a.date) || b.ts - a.ts);
+    $('listTitle').textContent = showAll ? '全部账单' : '本月账单';
+    $('toggleAll').textContent = showAll ? '只看本月' : '显示全部';
+
+    const listBox = $('list');
+    if (!listData.length) {
+      listBox.innerHTML = '<div class="empty">还没有记录，记一笔吧</div>';
+    } else {
+      listBox.innerHTML = listData.map(r => {
+        const icon = (CATS.find(c => c.key === r.cat) || {}).icon || '📦';
+        const note = r.note ? r.note : '无说明';
+        return `<div class="list-item">
+          <div class="icon">${icon}</div>
+          <div class="info">
+            <div class="top">
+              <span>${r.cat}</span>
+              <span class="amount">-${fmtMoney(r.amount)}</span>
+            </div>
+            <div class="bottom">${note} · ${fmtDate(r.date)}</div>
+          </div>
+          <button class="del" data-id="${r.id}">×</button>
+        </div>`;
+      }).join('');
+      listBox.querySelectorAll('.del').forEach(btn => {
+        btn.onclick = () => delRecord(btn.dataset.id);
+      });
+    }
+  }
+
+  function exportCSV(){
+    const all = load();
+    if (!all.length) { alert('还没有数据'); return; }
+    const rows = [['日期','分类','金额','说明']];
+    all.slice().sort((a,b) => a.date.localeCompare(b.date) || a.ts - b.ts)
+      .forEach(r => rows.push([r.date, r.cat, r.amount, r.note || '']));
+    const csv = '\uFEFF' + rows.map(row =>
+      row.map(cell => '"' + String(cell).replace(/"/g,'""') + '"').join(',')
+    ).join('\n');
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = '支出记录_' + todayStr() + '.csv';
+    a.click();
+    URL.revokeObjectURL(a.href);
+  }
+
+  function clearAll(){
+    if (!load().length) { alert('没有数据'); return; }
+    if (!confirm('确定清空所有记账数据？此操作不可恢复！')) return;
+    if (!confirm('再确认一次：真的要全部删除吗？')) return;
+    localStorage.removeItem(STORE_KEY);
+    renderAll();
+  }
+
+  function init(){
+    $('date').value = todayStr();
+    renderCats();
+    renderAll();
+
+    $('addBtn').onclick = addRecord;
+    $('exportBtn').onclick = exportCSV;
+    $('clearBtn').onclick = clearAll;
+    $('toggleAll').onclick = () => { showAll = !showAll; renderAll(); };
+
+    $('amount').addEventListener('keydown', e => { if (e.key === 'Enter') $('note').focus(); });
+    $('note').addEventListener('keydown', e => { if (e.key === 'Enter') addRecord(); });
+  }
+
+  init();
+})();
+</script>
+</body>
+</html>
